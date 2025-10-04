@@ -1,18 +1,13 @@
 [build]
 publish = "."
-
 [functions]
 directory = "netlify/functions"
 node_bundler = "esbuild"
-
-# Ensure functions aren't swallowed by the SPA redirect
 [[redirects]]
 from = "/.netlify/functions/*"
 to = "/.netlify/functions/:splat"
 status = 200
 force = true
-
-# SPA fallback for all other routes
 [[redirects]]
 from = "/*"
 to = "/index.html"
