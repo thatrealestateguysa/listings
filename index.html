@@ -134,7 +134,8 @@
 </div>
 
 <script>
-const API = 'https://script.google.com/macros/s/AKfycbzjklGxeQbxE0IIj-hJqnxF69SrtWy-dhhvdf9k7LH1g13Svxio53_n7mgPMcN-HSQ/exec';
+// Hit the Netlify Function (server-side proxy) to avoid CORS
+const API = "/.netlify/functions/gs";
 
 let DATA = [];
 let ADDRESSES = [];
@@ -285,7 +286,7 @@ async function bootstrap() {
   let json;
   try { json = JSON.parse(text); }
   catch (e) {
-    alert('Bootstrap failed: ' + e.message + '\n\nFirst 120 chars:\n' + text.slice(0,120) + '\n\nIf this persists, ensure your Web App URL returns JSON.');
+    alert('Bootstrap failed: ' + e.message + '\n\nFirst 120 chars:\n' + text.slice(0,120) + '\n\nIf this persists, ensure your Netlify Function is deployed.');
     return;
   }
   if (!json.ok) { alert('Bootstrap error: ' + (json.error || 'Unknown')); return; }
