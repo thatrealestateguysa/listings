@@ -1,9 +1,4 @@
-# Retry: write index.html by using a placeholder replacement instead of f-strings
-from pathlib import Path
-
-API_URL = "https://script.google.com/macros/s/AKfycbzjklGxeQbxE0IIj-hJqnxF69SrtWy-dhhvdf9k7LH1g13Svxio53_n7mgPMcN-HSQ/exec"
-
-html = """<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -11,6 +6,7 @@ html = """<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   :root { --red:#C70000; --bg:#0f0f10; --card:#151517; --muted:#bdbdbd; --line:#2a2a2d; }
+  * { box-sizing: border-box; }
   body { margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background:var(--bg); color:#eee; }
   header { background:var(--red); color:#fff; padding:16px 24px; }
   h1 { margin:0; font-size:20px; }
@@ -25,7 +21,7 @@ html = """<!doctype html>
   .btn.secondary { background:#1d1d20; border:1px solid var(--line); }
   .btn:disabled { background:#6a6a6a; cursor:not-allowed; }
   table { width:100%; border-collapse:collapse; margin-top:12px; }
-  th, td { padding:10px 8px; border-bottom:1px solid var(--line); text-align:left; font-size:14px; }
+  th, td { padding:10px 8px; border-bottom:1px solid var(--line); text-align:left; font-size:14px; vertical-align:middle; }
   th { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); }
   .tag { font-size:12px; padding:4px 8px; border-radius:999px; border:1px solid var(--line); background:#1a1a1d; color:#d6d6d6; }
   .muted { color:var(--muted); }
@@ -35,9 +31,11 @@ html = """<!doctype html>
   .grid-2 { display:grid; grid-template-columns:1fr; gap:12px; }
   @media (min-width: 980px){ .grid-2 { grid-template-columns: 1fr 1fr; } }
   .hide-mobile { display:none; }
-  @media (min-width: 860px){ .hide-mobile { display:table-cell; } }
+  @media (min-width: 980px){ .hide-mobile { display:table-cell; } }
+
   .badge-ok { color:#25D366; }
   .badge-miss { color:#ffba08; }
+
   form.add { display:grid; grid-template-columns: repeat(6, 1fr); gap:8px; margin-top:10px; }
   form.add input, form.add select { width:100%; }
   @media (max-width: 900px){ form.add { grid-template-columns: 1fr; } }
@@ -60,9 +58,9 @@ html = """<!doctype html>
   <!-- Main dashboard -->
   <div class="panel">
     <div class="row" style="margin-bottom:10px;">
-      <input id="search" type="text" placeholder="Search name, email, phone…" style="flex:2; min-width:220px;">
-      <select id="suburb" style="flex:1; min-width:180px;"><option value="">All Suburbs</option></select>
-      <select id="status" style="flex:1; min-width:180px;"><option value="">All Statuses</option></select>
+      <input id="search" type="text" placeholder="Search name, email, phone, address…" style="flex:2; min-width:240px;">
+      <select id="address" style="flex:1; min-width:240px;"><option value="">All Addresses</option></select>
+      <select id="status" style="flex:1; min-width:200px;"><option value="">All Statuses</option></select>
       <label class="pill"><input id="hasPhone" type="checkbox" style="transform:translateY(1px); margin-right:6px;"> Valid WhatsApp only</label>
       <button id="exportCsv" class="btn secondary">Export CSV (filtered)</button>
     </div>
@@ -70,8 +68,8 @@ html = """<!doctype html>
     <div class="grid-2">
       <div>
         <label class="muted">Message template</label>
-        <textarea id="tpl">Hi {{Name}}, Dawie here from Keller Williams Explore. Quick question: would you consider selling in {{Suburb}} within the next 6-12 months? We have qualified buyers searching now. If yes, when may I arrange a quick valuation?</textarea>
-        <div class="muted" style="margin-top:6px;">Placeholders: <span class="kbd">{{Name}}</span> <span class="kbd">{{FirstName}}</span> <span class="kbd">{{Suburb}}</span></div>
+        <textarea id="tpl">Hi {{Name}}, Dawie here from Keller Williams Explore. Quick question: would you consider selling at {{Address}} within the next 6-12 months? We have qualified buyers searching now. If yes, when may I arrange a quick valuation?</textarea>
+        <div class="muted" style="margin-top:6px;">Placeholders: <span class="kbd">{{Name}}</span> <span class="kbd">{{FirstName}}</span> <span class="kbd">{{Address}}</span></div>
       </div>
       <div>
         <label class="muted">Add a new lead</label>
@@ -80,7 +78,7 @@ html = """<!doctype html>
           <input name="Surname" placeholder="Surname">
           <input name="Contact Number" placeholder="Contact Number">
           <input name="Email" placeholder="Email">
-          <input name="Suburb" placeholder="Suburb">
+          <input name="Address" placeholder="Address">
           <input name="Agency" placeholder="Agency">
           <select name="Status" id="addStatus"></select>
           <button class="btn" style="grid-column: 1 / -1;">Add Lead</button>
@@ -95,10 +93,11 @@ html = """<!doctype html>
           <th>Name</th>
           <th class="hide-mobile">Email</th>
           <th>Phone</th>
-          <th>Suburb</th>
+          <th>Address</th>
           <th class="hide-mobile">Agency</th>
           <th>Status</th>
           <th>WhatsApp</th>
+          <th class="hide-mobile">WA Link</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -143,15 +142,16 @@ html = """<!doctype html>
 </div>
 
 <script>
-const API = 'API_PLACEHOLDER'; // <-- injected Apps Script Web App URL
+const API = 'https://script.google.com/macros/s/AKfycbzjklGxeQbxE0IIj-hJqnxF69SrtWy-dhhvdf9k7LH1g13Svxio53_n7mgPMcN-HSQ/exec';
+
 let DATA = [];
-let SUBURBS = [];
+let ADDRESSES = [];
 let STATUSES = [];
 let STATUS_OPTIONS = [];
 let SELECTED = null;
 
 const search   = document.getElementById('search');
-const suburb   = document.getElementById('suburb');
+const address  = document.getElementById('address');
 const statusEl = document.getElementById('status');
 const hasPhone = document.getElementById('hasPhone');
 const tpl      = document.getElementById('tpl');
@@ -176,12 +176,12 @@ function fillTpl(t, row) {
   return t
     .replaceAll('{{Name}}', row.Name || '')
     .replaceAll('{{FirstName}}', (row.Name || '').split(' ')[0] || '')
-    .replaceAll('{{Suburb}}', row.Suburb || '');
+    .replaceAll('{{Address}}', row.Address || '');
 }
 
 function matches(row, q) {
   if (!q) return true;
-  const hay = [row.Name, row.Email, row['Contact Number'], row.Suburb, row.Agency, row.Status].join(' ').toLowerCase();
+  const hay = [row.Name, row.Email, row['Contact Number'], row.Address, row.Agency, row.Status].join(' ').toLowerCase();
   return hay.includes(q.toLowerCase());
 }
 
@@ -189,22 +189,21 @@ function optionize(select, options, includeBlank) {
   const prev = select.value;
   select.innerHTML = includeBlank ? '<option value=""></option>' : '';
   options.forEach(v => {
-    const o = document.createElement('option');
-    o.value = v; o.textContent = v;
+    const o = document.createElement('option'); o.value = v; o.textContent = v;
     select.appendChild(o);
   });
   if (options.includes(prev)) select.value = prev;
 }
 
 function buildFilters() {
-  // suburbs
-  suburb.innerHTML = '<option value="">All Suburbs</option>';
-  SUBURBS.forEach(v => {
+  // addresses
+  address.innerHTML = '<option value="">All Addresses</option>';
+  ADDRESSES.forEach(v => {
     const o = document.createElement('option'); o.value = v; o.textContent = v;
-    suburb.appendChild(o);
+    address.appendChild(o);
   });
 
-  // statuses (filters)
+  // statuses (filter)
   statusEl.innerHTML = '<option value="">All Statuses</option>';
   const full = Array.from(new Set([...STATUS_OPTIONS, ...STATUSES]));
   full.forEach(v => {
@@ -219,7 +218,7 @@ function buildFilters() {
 
 function render() {
   const q  = search.value.trim();
-  const sb = suburb.value;
+  const addr = address.value;
   const st = statusEl.value;
   const mustPhone = hasPhone.checked;
 
@@ -228,7 +227,7 @@ function render() {
 
   for (const row of DATA) {
     if (q && !matches(row, q)) continue;
-    if (sb && row.Suburb !== sb) continue;
+    if (addr && row.Address !== addr) continue;
     if (st && row.Status !== st) continue;
 
     const valid = row.E164 && row.E164.startsWith('+');
@@ -242,13 +241,14 @@ function render() {
       <td><a href="#" data-id="${row.ID}" class="lead-link">${row.Name || ''}</a></td>
       <td class="hide-mobile">${row.Email || ''}</td>
       <td>${row['Contact Number'] || ''} &nbsp; ${valid ? '<span class="badge-ok">●</span>' : '<span class="badge-miss">●</span>'}</td>
-      <td>${row.Suburb || ''}</td>
+      <td>${row.Address || ''}</td>
       <td class="hide-mobile">${row.Agency || ''}</td>
       <td><span class="tag">${row.Status || ''}</span></td>
       <td>
         ${wa ? `<a class="btn" href="${wa}" target="_blank" rel="noopener">Open WhatsApp</a>` : '<button class="btn" disabled>No number</button>'}
         <button class="btn secondary" ${wa ? '' : 'disabled'} data-link="${wa}">Copy</button>
       </td>
+      <td class="hide-mobile">${wa ? `<span class="muted">${wa}</span>` : ''}</td>
     `;
     tbody.appendChild(tr);
     shown++;
@@ -290,7 +290,7 @@ async function bootstrap() {
   const json = await res.json();
   if (!json.ok) throw new Error(json.error || 'Bootstrap failed');
   DATA = json.rows || [];
-  SUBURBS = json.suburbs || [];
+  ADDRESSES = json.addresses || [];
   STATUSES = json.statuses || [];
   STATUS_OPTIONS = json.statusOptions || [];
   buildFilters();
@@ -299,21 +299,21 @@ async function bootstrap() {
 
 document.getElementById('exportCsv').addEventListener('click', () => {
   const q  = search.value.trim();
-  const sb = suburb.value;
+  const addr = address.value;
   const st = statusEl.value;
   const mustPhone = hasPhone.checked;
-  const rows = [['Name','Surname','Email','Contact Number','E164','Suburb','Agency','Status','WhatsAppLink','ID']];
+  const rows = [['Name','Surname','Email','Contact Number','E164','Address','Agency','Status','WhatsAppLink','ID']];
   for (const row of DATA) {
     const valid = row.E164 && row.E164.startsWith('+');
     if (q && !matches(row, q)) continue;
-    if (sb && row.Suburb !== sb) continue;
+    if (addr && row.Address !== addr) continue;
     if (st && row.Status !== st) continue;
     if (mustPhone && !valid) continue;
     const msg = fillTpl(tpl.value, row);
     const wa  = valid ? ('https://wa.me/' + row.E164.slice(1) + '?text=' + encodeURIComponent(msg)) : '';
-    rows.push([row.Name||'', row.Surname||'', row.Email||'', row['Contact Number']||'', row.E164||'', row.Suburb||'', row.Agency||'', row.Status||'', wa, row.ID||'']);
+    rows.push([row.Name||'', row.Surname||'', row.Email||'', row['Contact Number']||'', row.E164||'', row.Address||'', row.Agency||'', row.Status||'', wa, row.ID||'']);
   }
-  const csv = rows.map(r => r.map(x => `"${String(x).replace(/"/g,'""')}"`).join(',')).join('\\n');
+  const csv = rows.map(r => r.map(x => `"${String(x).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob = new Blob([csv], {type:'text/csv'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -388,7 +388,7 @@ async function loadNotes(id) {
   json.notes.forEach(n => {
     const div = document.createElement('div');
     div.className = 'note';
-    div.innerHTML = `<small>${n.Timestamp} • ${n.Author || '—'}</small>${(n.Note || '').replace(/\\n/g,'<br>')}`;
+    div.innerHTML = `<small>${n.Timestamp} • ${n.Author || '—'}</small>${(n.Note || '').replace(/\n/g,'<br>')}`;
     notesList.appendChild(div);
   });
 }
@@ -415,23 +415,15 @@ addNoteBtn.addEventListener('click', async () => {
 
 // Filters/listeners
 search.addEventListener('input', render);
-suburb.addEventListener('change', render);
+address.addEventListener('change', render);
 statusEl.addEventListener('change', render);
 hasPhone.addEventListener('change', render);
 tpl.addEventListener('input', render);
 
 // Init
 bootstrap().catch(err => {
-  alert('Bootstrap failed: ' + err.message + '\\n\\n1) Check your Web App URL.\\n2) Deploy set to "Anyone".\\n3) Re-deploy a new version.');
+  alert('Bootstrap failed: ' + err.message + '\n\n1) Check your Web App URL.\n2) Deploy set to "Anyone".\n3) Re-deploy a new version.');
 });
 </script>
 </body>
 </html>
-"""
-
-# Inject API URL
-html = html.replace("API_PLACEHOLDER", API_URL)
-
-out_path = Path("/mnt/data/index.html")
-out_path.write_text(html, encoding="utf-8")
-str(out_path)
