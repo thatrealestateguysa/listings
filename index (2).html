@@ -24,9 +24,9 @@
   th, td { padding:10px 8px; border-bottom:1px solid var(--line); text-align:left; font-size:14px; vertical-align:middle; }
   th { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); }
   .tag { font-size:12px; padding:4px 8px; border-radius:999px; border:1px solid var(--line); background:#1a1a1d; color:#d6d6d6; }
-  .muted { color:var(--muted); }
+  .muted { color:#bdbdbd; }
   .foot { display:flex; gap:8px; align-items:center; justify-content:space-between; margin-top:12px; flex-wrap:wrap; }
-  .count { font-size:13px; color:var(--muted); }
+  .count { font-size:13px; color:#bdbdbd; }
   .kbd { background:#1d1d20; border:1px solid var(--line); border-bottom-width:2px; padding:2px 6px; border-radius:6px; font-family: ui-monospace; font-size:12px; color:#d6d6d6; }
   .grid-2 { display:grid; grid-template-columns:1fr; gap:12px; }
   @media (min-width: 980px){ .grid-2 { grid-template-columns: 1fr 1fr; } }
@@ -142,7 +142,8 @@
 </div>
 
 <script>
-const API = 'https://script.google.com/macros/s/AKfycbzjklGxeQbxE0IIj-hJqnxF69SrtWy-dhhvdf9k7LH1g13Svxio53_n7mgPMcN-HSQ/exec';
+// Use Netlify proxy to avoid CORS
+const API = '/api';
 
 let DATA = [];
 let ADDRESSES = [];
@@ -196,14 +197,12 @@ function optionize(select, options, includeBlank) {
 }
 
 function buildFilters() {
-  // addresses
   address.innerHTML = '<option value="">All Addresses</option>';
   ADDRESSES.forEach(v => {
     const o = document.createElement('option'); o.value = v; o.textContent = v;
     address.appendChild(o);
   });
 
-  // statuses (filter)
   statusEl.innerHTML = '<option value="">All Statuses</option>';
   const full = Array.from(new Set([...STATUS_OPTIONS, ...STATUSES]));
   full.forEach(v => {
@@ -211,7 +210,6 @@ function buildFilters() {
     statusEl.appendChild(o);
   });
 
-  // add-form status and detail status
   optionize(addStatus, STATUS_OPTIONS, true);
   optionize(detailStatus, STATUS_OPTIONS, true);
 }
@@ -422,7 +420,7 @@ tpl.addEventListener('input', render);
 
 // Init
 bootstrap().catch(err => {
-  alert('Bootstrap failed: ' + err.message + '\n\n1) Check your Web App URL.\n2) Deploy set to "Anyone".\n3) Re-deploy a new version.');
+  alert('Bootstrap failed: ' + err.message + '\n\nIf this persists, your proxy or web app URL may be misconfigured.');
 });
 </script>
 </body>
