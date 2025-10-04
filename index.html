@@ -1,1 +1,568 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lead Gen Dashboard</title></head><body><div id="app">Loading…</div><script>const API='/.netlify/functions/gs';fetch(API+'?action=ping').then(r=>r.json()).then(j=>{document.getElementById('app').textContent='OK: '+JSON.stringify(j)}).catch(e=>alert(e));</script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lead Gen Dashboard — WhatsApp + Notes</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --red:#C70000; --bg:#0f0f10; --card:#151517; --muted:#bdbdbd; --line:#2a2a2d; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background:var(--bg); color:#eee; }
+  header { background:var(--red); color:#fff; padding:16px 24px; }
+  h1 { margin:0; font-size:20px; }
+  .wrap { padding:16px 24px; display:grid; gap:16px; grid-template-columns: 1fr; }
+  @media (min-width: 1100px){ .wrap { grid-template-columns: 2fr 1fr; } }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; box-shadow:0 6px 20px rgba(0,0,0,.25); }
+  .row { display:flex; gap:12px; flex-wrap:wrap; }
+  input[type="text"], select, textarea { background:#1d1d20; color:#eaeaea; border:1px solid var(--line); border-radius:10px; padding:10px 12px; outline:none; font-family: inherit; font-size: 14px; }
+  textarea { width:100%; min-height:100px; resize:vertical; }
+  .pill { display:inline-flex; gap:8px; align-items:center; padding:8px 10px; background:#1d1d20; border:1px solid var(--line); border-radius:999px; }
+  .btn { background:var(--red); color:#fff; border:none; border-radius:10px; padding:10px 14px; cursor:pointer; font-weight: 500; }
+  .btn.secondary { background:#1d1d20; border:1px solid var(--line); }
+  .btn:disabled { background:#4a4a4a; color: #888; cursor:not-allowed; }
+  table { width:100%; border-collapse:collapse; margin-top:12px; }
+  th, td { padding:10px 8px; border-bottom:1px solid var(--line); text-align:left; font-size:14px; vertical-align:middle; }
+  th { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); }
+  .tag { font-size:12px; padding:4px 8px; border-radius:999px; border:1px solid var(--line); background:#1a1a1d; color:#d6d6d6; white-space: nowrap; }
+  .muted { color:var(--muted); }
+  .foot { display:flex; gap:8px; align-items:center; justify-content:space-between; margin-top:12px; flex-wrap:wrap; }
+  .count { font-size:13px; color:var(--muted); }
+  .kbd { background:#1d1d20; border:1px solid var(--line); border-bottom-width:2px; padding:2px 6px; border-radius:6px; font-family: ui-monospace; font-size:12px; color:#d6d6d6; }
+  .grid-2 { display:grid; grid-template-columns:1fr; gap:12px; }
+  @media (min-width: 980px){ .grid-2 { grid-template-columns: 1fr 1fr; } }
+  .hide-mobile { display:none; }
+  @media (min-width: 980px){ .hide-mobile { display:table-cell; } }
+  .badge-ok { color:#25D366; }
+  .badge-miss { color:#ffba08; }
+  form.add { display:grid; grid-template-columns: repeat(5, 1fr); gap:8px; margin-top:10px; }
+  form.add input, form.add select { width:100%; }
+  @media (max-width: 900px){ form.add { grid-template-columns: 1fr; } }
+  .notes { position:sticky; top:16px; height: calc(100vh - 64px); overflow:auto; }
+  .lead-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .notes-list { display:flex; flex-direction:column; gap:8px; margin-top:10px; max-height: 45vh; overflow:auto; }
+  .note { border:1px solid var(--line); border-radius:12px; padding:10px; background:#1a1a1d; }
+  .note small { color:#9b9b9b; display:block; margin-bottom:6px; }
+  .loader { text-align: center; padding: 40px; font-size: 16px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+    <div>
+      <h1>Lead Gen Dashboard — WhatsApp + Notes</h1>
+      <div class="muted">Powered by Google Sheets • Valid numbers show a green badge • Notes sync to the “Notes” sheet</div>
+    </div>
+    <button id="settingsBtn" class="btn secondary">Change API URL</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="panel">
+    <div class="row" style="margin-bottom:10px;">
+      <input id="search" type="text" placeholder="Search name, email, phone, address…" style="flex:2; min-width:240px;">
+      <select id="address" style="flex:1; min-width:240px;"><option value="">All Addresses</option></select>
+      <select id="status" style="flex:1; min-width:200px;"><option value="">All Statuses</option></select>
+      <label class="pill"><input id="hasPhone" type="checkbox" style="transform:translateY(1px); margin-right:6px;"> Valid WhatsApp only</label>
+      <button id="exportCsv" class="btn secondary">Export CSV (filtered)</button>
+    </div>
+
+    <div class="grid-2">
+      <div>
+        <label class="muted">Message template</label>
+        <textarea id="tpl">Hi {{Name}}, Dawie here from Keller Williams Explore. Quick question: would you consider selling at {{Address}} within the next 6-12 months? We have qualified buyers searching now. If yes, when may I arrange a quick valuation?</textarea>
+        <div class="muted" style="margin-top:6px;">Placeholders: <span class="kbd">{{Name}}</span> <span class="kbd">{{FirstName}}</span> <span class="kbd">{{Address}}</span></div>
+      </div>
+      <div>
+        <label class="muted">Add a new lead</label>
+        <form class="add" id="addForm">
+          <input name="Name" placeholder="Name" required>
+          <input name="Surname" placeholder="Surname">
+          <input name="Contact Number" placeholder="Contact Number" required>
+          <input name="Email" placeholder="Email" type="email">
+          <input name="Address" placeholder="Address">
+          <select name="Status" id="addStatus"></select>
+          <button class="btn" style="grid-column: 1 / -1;">Add Lead</button>
+        </form>
+        <div id="addMsg" class="muted" style="margin-top:6px; min-height: 1em;"></div>
+      </div>
+    </div>
+
+    <table id="table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th class="hide-mobile">Email</th>
+          <th>Phone</th>
+          <th>Address</th>
+          <th>Status</th>
+          <th>WhatsApp</th>
+          <th class="hide-mobile">WA Link</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td colspan="7"><div class="loader">Loading leads from Google Sheet...</div></td></tr>
+      </tbody>
+    </table>
+
+    <div class="foot">
+      <div class="count" id="count"></div>
+      <div class="muted">Tip: Press <span class="kbd">Ctrl/⌘ + F</span> to quick-search.</div>
+    </div>
+  </div>
+
+  <div class="panel notes">
+    <div class="lead-head">
+      <div>
+        <div class="muted">Selected lead</div>
+        <div id="leadName" style="font-weight:600;">(none)</div>
+        <div id="leadId" class="muted" style="font-size:12px;"></div>
+      </div>
+    </div>
+
+    <div style="margin-top:10px;">
+      <label class="muted">Status</label>
+      <div class="row">
+        <select id="detailStatus" style="flex:1;" disabled></select>
+        <button id="saveStatus" class="btn" disabled>Save Status</button>
+      </div>
+      <div id="statusMsg" class="muted" style="margin-top:6px; min-height: 1em;"></div>
+    </div>
+
+    <div style="margin-top:14px;">
+      <label class="muted">Notes</label>
+      <div class="notes-list" id="notesList"><div class="muted">Select a lead to see notes.</div></div>
+      <textarea id="noteText" placeholder="Type a note…" disabled></textarea>
+      <div class="row" style="margin-top: 8px;">
+        <input id="noteAuthor" type="text" placeholder="Your name (optional)" style="flex:1;" disabled>
+        <button id="addNote" class="btn" disabled>Add Note</button>
+      </div>
+      <div id="noteMsg" class="muted" style="margin-top:6px; min-height: 1em;"></div>
+    </div>
+  </div>
+</div>
+
+<div id="apiUrlModal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; backdrop-filter: blur(4px); background-color: rgba(0,0,0,0.6);">
+  <div style="background-color: var(--card); margin: 15% auto; padding: 24px; border: 1px solid var(--line); border-radius: 16px; width: 90%; max-width: 550px; box-shadow: 0 8px 30px rgba(0,0,0,.4);">
+    <h2 style="margin-top: 0;">Configure Google Script URL</h2>
+    <p class="muted" style="margin-bottom: 16px;">Paste your Web App URL from your Google Apps Script deployment below. You can find this by clicking "Deploy" > "Manage deployments" in the script editor.</p>
+    <input type="text" id="apiUrlInput" style="width: 100%; margin-bottom: 12px;" placeholder="https://script.google.com/macros/s/...">
+    <div id="apiUrlError" style="color: var(--red); font-size: 14px; min-height: 1.2em; margin-bottom: 12px;"></div>
+    <div style="display: flex; gap: 12px; justify-content: flex-end;">
+       <button id="cancelApiUrlBtn" class="btn secondary">Cancel</button>
+       <button id="saveApiUrlBtn" class="btn">Save & Connect</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let API_URL;
+
+let DATA = [];
+let ADDRESSES = [];
+let STATUSES = [];
+let STATUS_OPTIONS = [];
+let SELECTED = null;
+
+const search     = document.getElementById('search');
+const address    = document.getElementById('address');
+const statusEl   = document.getElementById('status');
+const hasPhone   = document.getElementById('hasPhone');
+const tpl        = document.getElementById('tpl');
+const tbody      = document.querySelector('#table tbody');
+const count      = document.getElementById('count');
+const exportCsvBtn = document.getElementById('exportCsv');
+
+const leadName     = document.getElementById('leadName');
+const leadId       = document.getElementById('leadId');
+const detailStatus = document.getElementById('detailStatus');
+const saveStatus   = document.getElementById('saveStatus');
+const statusMsg    = document.getElementById('statusMsg');
+
+const notesList    = document.getElementById('notesList');
+const noteText     = document.getElementById('noteText');
+const noteAuthor   = document.getElementById('noteAuthor');
+const addNoteBtn   = document.getElementById('addNote');
+const noteMsg      = document.getElementById('noteMsg');
+
+const addForm      = document.getElementById('addForm');
+const addStatus    = document.getElementById('addStatus');
+const addMsg       = document.getElementById('addMsg');
+
+// API URL Modal elements
+const settingsBtn     = document.getElementById('settingsBtn');
+const apiUrlModal     = document.getElementById('apiUrlModal');
+const apiUrlInput     = document.getElementById('apiUrlInput');
+const apiUrlError     = document.getElementById('apiUrlError');
+const saveApiUrlBtn   = document.getElementById('saveApiUrlBtn');
+const cancelApiUrlBtn = document.getElementById('cancelApiUrlBtn');
+
+
+function fillTpl(t, row) {
+  return t
+    .replaceAll('{{Name}}', row.Name || '')
+    .replaceAll('{{FirstName}}', (row.Name || '').split(' ')[0] || '')
+    .replaceAll('{{Address}}', row.Address || '');
+}
+
+function matches(row, q) {
+  if (!q) return true;
+  const hay = [row.Name, row.Surname, row.Email, row['Contact Number'], row.Address, row.Status].join(' ').toLowerCase();
+  return hay.includes(q.toLowerCase());
+}
+
+function optionize(select, options, includeBlank) {
+  const prev = select.value;
+  select.innerHTML = includeBlank ? '<option value="">(no status)</option>' : '';
+  options.forEach(v => {
+    const o = document.createElement('option'); o.value = v; o.textContent = v;
+    select.appendChild(o);
+  });
+  if (options.includes(prev)) select.value = prev;
+}
+
+function buildFilters() {
+  const prevAddr = address.value;
+  address.innerHTML = '<option value="">All Addresses</option>';
+  ADDRESSES.forEach(v => {
+    const o = document.createElement('option'); o.value = v; o.textContent = v;
+    address.appendChild(o);
+  });
+  if(ADDRESSES.includes(prevAddr)) address.value = prevAddr;
+
+  const prevStatus = statusEl.value;
+  statusEl.innerHTML = '<option value="">All Statuses</option>';
+  const full = Array.from(new Set([...STATUS_OPTIONS, ...STATUSES])).sort();
+  full.forEach(v => {
+    if(!v) return;
+    const o = document.createElement('option'); o.value = v; o.textContent = v;
+    statusEl.appendChild(o);
+  });
+  if(full.includes(prevStatus)) statusEl.value = prevStatus;
+
+
+  optionize(addStatus, STATUS_OPTIONS, true);
+  optionize(detailStatus, STATUS_OPTIONS, true);
+}
+
+function render() {
+  const q         = search.value.trim();
+  const addr      = address.value;
+  const st        = statusEl.value;
+  const mustPhone = hasPhone.checked;
+
+  tbody.innerHTML = '';
+  let shown = 0;
+
+  const filteredData = DATA.filter(row => {
+    if (q && !matches(row, q)) return false;
+    if (addr && row.Address !== addr) return false;
+    if (st && row.Status !== st) return false;
+    const valid = row.E164 && row.E164.startsWith('+');
+    if (mustPhone && !valid) return false;
+    return true;
+  });
+
+  if (filteredData.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="loader">No leads match your filters.</div></td></tr>`;
+  }
+
+  for (const row of filteredData) {
+    const valid = row.E164 && row.E164.startsWith('+');
+    const msg = fillTpl(tpl.value, row);
+    const wa  = valid ? ('https://wa.me/' + row.E164.slice(1) + '?text=' + encodeURIComponent(msg)) : '';
+
+    const tr = document.createElement('tr');
+    tr.style.cursor = 'pointer';
+    tr.dataset.id = row.ID;
+    tr.innerHTML = `
+      <td>${row.Name || ''} ${row.Surname || ''}</td>
+      <td class="hide-mobile">${row.Email || ''}</td>
+      <td>${row['Contact Number'] || ''} &nbsp; ${valid ? '<span class="badge-ok">●</span>' : '<span class="badge-miss">●</span>'}</td>
+      <td>${row.Address || ''}</td>
+      <td><span class="tag">${row.Status || 'N/A'}</span></td>
+      <td>
+        ${wa ? `<a class="btn" href="${wa}" target="_blank" rel="noopener" data-action="wa-link">Open</a>` : '<button class="btn" disabled>No number</button>'}
+        <button class="btn secondary" ${wa ? '' : 'disabled'} data-action="copy" data-link="${wa}">Copy</button>
+      </td>
+      <td class="hide-mobile">${wa ? `<span class="muted">${wa.substring(0, 40)}...</span>` : ''}</td>
+    `;
+    tbody.appendChild(tr);
+    shown++;
+  }
+  count.textContent = `${shown} shown • ${DATA.length} total`;
+}
+
+tbody.addEventListener('click', (e) => {
+  const copyBtn = e.target.closest('button[data-action="copy"]');
+  if (copyBtn) {
+    e.stopPropagation(); // prevent row click
+    const link = copyBtn.getAttribute('data-link');
+    if (!link) return;
+    navigator.clipboard.writeText(link).then(()=>{
+      const old = copyBtn.textContent;
+      copyBtn.textContent = 'Copied!';
+      setTimeout(()=>copyBtn.textContent = old, 1200);
+    });
+    return;
+  }
+  
+  if (e.target.closest('[data-action="wa-link"]')) {
+      e.stopPropagation();
+      return;
+  }
+
+  const tr = e.target.closest('tr');
+  if (tr && tr.dataset.id) {
+    const id = tr.dataset.id;
+    const lead = DATA.find(r => r.ID === id);
+    if (lead) selectLead(lead);
+    document.querySelectorAll('#table tbody tr').forEach(r => r.style.background = '');
+    tr.style.background = '#2a2a2d';
+  }
+});
+
+function selectLead(lead) {
+  SELECTED = lead;
+  leadName.textContent = `${lead.Name || ''} ${lead.Surname || '(no name)'}`;
+  leadId.textContent = lead.ID || '';
+  detailStatus.value = STATUS_OPTIONS.includes(lead.Status) ? lead.Status : '';
+  
+  // Enable note and status controls
+  detailStatus.disabled = false;
+  saveStatus.disabled = false;
+  noteText.disabled = false;
+  noteAuthor.disabled = false;
+  addNoteBtn.disabled = false;
+  
+  loadNotes(lead.ID);
+}
+
+async function apiCall(params = {}, method = 'GET', body = null) {
+    if (!API_URL) {
+        alert("API URL is not configured. Please set it in the settings.");
+        return { ok: false, error: "API URL not configured." };
+    }
+    const url = new URL(API_URL);
+    for(const key in params) {
+        url.searchParams.set(key, params[key]);
+    }
+
+    try {
+        const options = { method };
+        if (body) {
+            options.body = body;
+            options.headers = { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' };
+        }
+        const response = await fetch(url, options);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const text = await response.text();
+        return JSON.parse(text);
+    } catch (error) {
+        console.error("API Call Failed:", error);
+        alert(`Failed to communicate with the server. Please check your connection and the API_URL constant.\nError: ${error.message}`);
+        return { ok: false, error: error.message };
+    }
+}
+
+
+async function bootstrap() {
+  tbody.innerHTML = `<tr><td colspan="7"><div class="loader">Loading leads from Google Sheet...</div></td></tr>`;
+  const json = await apiCall({ action: 'bootstrap' });
+  if (!json || !json.ok) { 
+    tbody.innerHTML = `<tr><td colspan="7"><div class="loader" style="color: var(--red);">Error loading data: ${json.error || 'Unknown error'}. Check the API URL and your Google Sheet permissions.</div></td></tr>`;
+    return; 
+  }
+  DATA = json.rows || [];
+  ADDRESSES = json.addresses || [];
+  STATUSES = json.statuses || [];
+  STATUS_OPTIONS = json.statusOptions || [];
+  buildFilters();
+  render();
+}
+
+exportCsvBtn.addEventListener('click', () => {
+  const q         = search.value.trim();
+  const addr      = address.value;
+  const st        = statusEl.value;
+  const mustPhone = hasPhone.checked;
+  const rows = [['Name','Surname','Email','Contact Number','E164','Address','Status','WhatsAppLink','ID']];
+  for (const row of DATA) {
+    const valid = row.E164 && row.E164.startsWith('+');
+    if (q && !matches(row, q)) continue;
+    if (addr && row.Address !== addr) continue;
+    if (st && row.Status !== st) continue;
+    if (mustPhone && !valid) continue;
+    const msg = fillTpl(tpl.value, row);
+    const wa  = valid ? ('https://wa.me/' + row.E164.slice(1) + '?text=' + encodeURIComponent(msg)) : '';
+    rows.push([row.Name||'', row.Surname||'', row.Email||'', row['Contact Number']||'', row.E164||'', row.Address||'', row.Status||'', wa, row.ID||'']);
+  }
+  const csv = rows.map(r => r.map(x => `"${String(x).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'leads_filtered.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+addForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = addForm.querySelector('button');
+  btn.disabled = true;
+  btn.textContent = 'Adding...';
+
+  const fd = new FormData(e.target);
+  const rec = Object.fromEntries(fd.entries());
+  
+  const body = new URLSearchParams();
+  body.set('action', 'append');
+  body.set('payload', JSON.stringify(rec));
+
+  const json = await apiCall({}, 'POST', body);
+  
+  if (json.ok) {
+    addMsg.textContent = 'Lead added successfully.';
+    addMsg.style.color = '#25D366';
+    DATA.push(json.row);
+    // Refresh addresses list if new one was added
+    if(json.row.Address && !ADDRESSES.includes(json.row.Address)){
+        ADDRESSES.push(json.row.Address);
+        ADDRESSES.sort();
+    }
+    buildFilters();
+    render();
+    e.target.reset();
+  } else {
+    addMsg.textContent = 'Error: ' + (json.error || 'Unknown');
+    addMsg.style.color = 'var(--red)';
+  }
+  setTimeout(()=> {
+    addMsg.textContent = '';
+    btn.disabled = false;
+    btn.textContent = 'Add Lead';
+  }, 3000);
+});
+
+saveStatus.addEventListener('click', async () => {
+  if (!SELECTED) return;
+  saveStatus.disabled = true;
+  const newStatus = detailStatus.value;
+  const body = new URLSearchParams();
+  body.set('action', 'update');
+  body.set('payload', JSON.stringify({ ID: SELECTED.ID, Status: newStatus }));
+
+  const json = await apiCall({}, 'POST', body);
+
+  if (json.ok) {
+    statusMsg.textContent = 'Status saved.';
+    statusMsg.style.color = '#25D366';
+    const idx = DATA.findIndex(r => r.ID === SELECTED.ID);
+    if (idx >= 0) DATA[idx] = json.row;
+    SELECTED = json.row;
+    render();
+  } else {
+    statusMsg.textContent = 'Error: ' + (json.error || 'Unknown');
+    statusMsg.style.color = 'var(--red)';
+  }
+  setTimeout(()=> {
+    statusMsg.textContent = '';
+    saveStatus.disabled = false;
+  }, 2500);
+});
+
+async function loadNotes(id) {
+  notesList.innerHTML = '<div class="muted">Loading notes…</div>';
+  const json = await apiCall({ action: 'notes', id: id });
+
+  if (!json.ok) { notesList.innerHTML = '<div class="muted">Failed to load notes.</div>'; return; }
+  if (!json.notes.length) { notesList.innerHTML = '<div class="muted">No notes yet.</div>'; return; }
+  notesList.innerHTML = '';
+  json.notes.forEach(n => {
+    const div = document.createElement('div');
+    div.className = 'note';
+    // Sanitize note content before inserting
+    const noteContent = document.createElement('div');
+    noteContent.innerText = n.Note || '';
+    div.innerHTML = `<small>${n.Timestamp} • ${n.Author || '—'}</small>${noteContent.innerHTML.replace(/\n/g,'<br>')}`;
+    notesList.appendChild(div);
+  });
+}
+
+addNoteBtn.addEventListener('click', async () => {
+  if (!SELECTED) return;
+  const note = noteText.value.trim();
+  const author = noteAuthor.value.trim();
+  if (!note) return;
+  
+  addNoteBtn.disabled = true;
+
+  const body = new URLSearchParams();
+  body.set('action','addNote');
+  body.set('payload', JSON.stringify({ ID: SELECTED.ID, Note: note, Author: author }));
+  
+  const json = await apiCall({}, 'POST', body);
+
+  if (json.ok) {
+    noteMsg.textContent = 'Note added.';
+    noteMsg.style.color = '#25D366';
+    noteText.value = '';
+    loadNotes(SELECTED.ID);
+  } else {
+    noteMsg.textContent = 'Error: ' + (json.error || 'Unknown');
+    noteMsg.style.color = 'var(--red)';
+  }
+  setTimeout(()=> {
+    noteMsg.textContent='';
+    addNoteBtn.disabled = false;
+  }, 2500);
+});
+
+// --- Event Listeners ---
+search.addEventListener('input', render);
+address.addEventListener('change', render);
+statusEl.addEventListener('change', render);
+hasPhone.addEventListener('change', render);
+tpl.addEventListener('input', render);
+
+settingsBtn.addEventListener('click', () => {
+    apiUrlInput.value = localStorage.getItem('leadGenApiUrl') || '';
+    apiUrlError.textContent = '';
+    apiUrlModal.style.display = 'block';
+});
+
+cancelApiUrlBtn.addEventListener('click', () => {
+    apiUrlModal.style.display = 'none';
+});
+
+saveApiUrlBtn.addEventListener('click', () => {
+    const url = apiUrlInput.value.trim();
+    if (url && url.startsWith('https://script.google.com/macros/s/')) {
+        localStorage.setItem('leadGenApiUrl', url);
+        API_URL = url;
+        apiUrlModal.style.display = 'none';
+        bootstrap();
+    } else {
+        apiUrlError.textContent = 'Please enter a valid Google Apps Script URL.';
+    }
+});
+
+
+// --- Init ---
+function initApp() {
+    API_URL = localStorage.getItem('leadGenApiUrl');
+    if (!API_URL) {
+        tbody.innerHTML = `<tr><td colspan="7"><div class="loader">Please configure your Google Apps Script URL in the settings.</div></td></tr>`;
+        apiUrlModal.style.display = 'block';
+    } else {
+        bootstrap();
+    }
+}
+
+document.addEventListener('DOMContentLoaded', initApp);
+</script>
+</body>
+</html>
+
+
