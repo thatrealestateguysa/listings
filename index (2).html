@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lead Gen Dashboard — WhatsApp + Notes</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --red:#C70000; --bg:#0f0f10; --card:#151517; --muted:#bdbdbd; --line:#2a2a2d; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background:var(--bg); color:#eee; }
+  header { background:var(--red); color:#fff; padding:16px 24px; }
+  h1 { margin:0; font-size:20px; }
+  .wrap { padding:16px 24px; display:grid; gap:16px; grid-template-columns: 1fr; }
+  @media (min-width: 1100px){ .wrap { grid-template-columns: 2fr 1fr; } }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; box-shadow:0 6px 20px rgba(0,0,0,.25); }
+  .row { display:flex; gap:12px; flex-wrap:wrap; }
+  input[type="text"], select, textarea { background:#1d1d20; color:#eaeaea; border:1px solid var(--line); border-radius:10px; padding:10px 12px; outline:none; }
+  textarea { width:100%; min-height:100px; resize:vertical; }
+  .pill { display:inline-flex; gap:8px; align-items:center; padding:8px 10px; background:#1d1d20; border:1px solid var(--line); border-radius:999px; }
+  .btn { background:var(--red); color:#fff; border:none; border-radius:10px; padding:10px 14px; cursor:pointer; }
+  .btn.secondary { background:#1d1d20; border:1px solid var(--line); }
+  .btn:disabled { background:#6a6a6a; cursor:not-allowed; }
+  table { width:100%; border-collapse:collapse; margin-top:12px; }
+  th, td { padding:10px 8px; border-bottom:1px solid var(--line); text-align:left; font-size:14px; vertical-align:middle; }
+  th { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); }
+  .tag { font-size:12px; padding:4px 8px; border-radius:999px; border:1px solid var(--line); background:#1a1a1d; color:#d6d6d6; }
+  .muted { color:var(--muted); }
+  .foot { display:flex; gap:8px; align-items:center; justify-content:space-between; margin-top:12px; flex-wrap:wrap; }
+  .count { font-size:13px; color:var(--muted); }
+  .kbd { background:#1d1d20; border:1px solid var(--line); border-bottom-width:2px; padding:2px 6px; border-radius:6px; font-family: ui-monospace; font-size:12px; color:#d6d6d6; }
+  .grid-2 { display:grid; grid-template-columns:1fr; gap:12px; }
+  @media (min-width: 980px){ .grid-2 { grid-template-columns: 1fr 1fr; } }
+  .hide-mobile { display:none; }
+  @media (min-width: 980px){ .hide-mobile { display:table-cell; } }
+
+  .badge-ok { color:#25D366; }
+  .badge-miss { color:#ffba08; }
+
+  form.add { display:grid; grid-template-columns: repeat(6, 1fr); gap:8px; margin-top:10px; }
+  form.add input, form.add select { width:100%; }
+  @media (max-width: 900px){ form.add { grid-template-columns: 1fr; } }
+
+  /* Notes panel */
+  .notes { position:sticky; top:16px; height: calc(100vh - 64px); overflow:auto; }
+  .lead-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .notes-list { display:flex; flex-direction:column; gap:8px; margin-top:10px; max-height: 45vh; overflow:auto; }
+  .note { border:1px solid var(--line); border-radius:12px; padding:10px; background:#1a1a1d; }
+  .note small { color:#9b9b9b; display:block; margin-bottom:6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Lead Gen Dashboard — WhatsApp + Notes</h1>
+  <div class="muted">Powered by Google Sheets • Valid numbers show a green badge • Notes sync to the “Notes” sheet</div>
+</header>
+
+<div class="wrap">
+  <!-- Main dashboard -->
+  <div class="panel">
+    <div class="row" style="margin-bottom:10px;">
+      <input id="search" type="text" placeholder="Search name, email, phone, address…" style="flex:2; min-width:240px;">
+      <select id="address" style="flex:1; min-width:240px;"><option value="">All Addresses</option></select>
+      <select id="status" style="flex:1; min-width:200px;"><option value="">All Statuses</option></select>
+      <label class="pill"><input id="hasPhone" type="checkbox" style="transform:translateY(1px); margin-right:6px;"> Valid WhatsApp only</label>
+      <button id="exportCsv" class="btn secondary">Export CSV (filtered)</button>
+    </div>
+
+    <div class="grid-2">
+      <div>
+        <label class="muted">Message template</label>
+        <textarea id="tpl">Hi {{Name}}, Dawie here from Keller Williams Explore. Quick question: would you consider selling at {{Address}} within the next 6-12 months? We have qualified buyers searching now. If yes, when may I arrange a quick valuation?</textarea>
+        <div class="muted" style="margin-top:6px;">Placeholders: <span class="kbd">{{Name}}</span> <span class="kbd">{{FirstName}}</span> <span class="kbd">{{Address}}</span></div>
+      </div>
+      <div>
+        <label class="muted">Add a new lead</label>
+        <form class="add" id="addForm">
+          <input name="Name" placeholder="Name">
+          <input name="Surname" placeholder="Surname">
+          <input name="Contact Number" placeholder="Contact Number">
+          <input name="Email" placeholder="Email">
+          <input name="Address" placeholder="Address">
+          <input name="Agency" placeholder="Agency">
+          <select name="Status" id="addStatus"></select>
+          <button class="btn" style="grid-column: 1 / -1;">Add Lead</button>
+        </form>
+        <div id="addMsg" class="muted" style="margin-top:6px;"></div>
+      </div>
+    </div>
+
+    <table id="table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th class="hide-mobile">Email</th>
+          <th>Phone</th>
+          <th>Address</th>
+          <th class="hide-mobile">Agency</th>
+          <th>Status</th>
+          <th>WhatsApp</th>
+          <th class="hide-mobile">WA Link</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <div class="foot">
+      <div class="count" id="count"></div>
+      <div class="muted">Tip: Press <span class="kbd">Ctrl/⌘ + F</span> to quick-search.</div>
+    </div>
+  </div>
+
+  <!-- Notes / details side panel -->
+  <div class="panel notes">
+    <div class="lead-head">
+      <div>
+        <div class="muted">Selected lead</div>
+        <div id="leadName" style="font-weight:600;">(none)</div>
+        <div id="leadId" class="muted" style="font-size:12px;"></div>
+      </div>
+    </div>
+
+    <div style="margin-top:10px;">
+      <label class="muted">Status</label>
+      <div class="row">
+        <select id="detailStatus" style="flex:1;"></select>
+        <button id="saveStatus" class="btn">Save Status</button>
+      </div>
+      <div id="statusMsg" class="muted" style="margin-top:6px;"></div>
+    </div>
+
+    <div style="margin-top:14px;">
+      <label class="muted">Notes</label>
+      <div class="notes-list" id="notesList"></div>
+      <textarea id="noteText" placeholder="Type a note…"></textarea>
+      <div class="row">
+        <input id="noteAuthor" type="text" placeholder="Your name (optional)" style="flex:1;">
+        <button id="addNote" class="btn">Add Note</button>
+      </div>
+      <div id="noteMsg" class="muted" style="margin-top:6px;"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = 'https://script.google.com/macros/s/AKfycbzjklGxeQbxE0IIj-hJqnxF69SrtWy-dhhvdf9k7LH1g13Svxio53_n7mgPMcN-HSQ/exec';
+
+let DATA = [];
+let ADDRESSES = [];
+let STATUSES = [];
+let STATUS_OPTIONS = [];
+let SELECTED = null;
+
+const search   = document.getElementById('search');
+const address  = document.getElementById('address');
+const statusEl = document.getElementById('status');
+const hasPhone = document.getElementById('hasPhone');
+const tpl      = document.getElementById('tpl');
+const tbody    = document.querySelector('#table tbody');
+const count    = document.getElementById('count');
+
+const leadName = document.getElementById('leadName');
+const leadId   = document.getElementById('leadId');
+const detailStatus = document.getElementById('detailStatus');
+const saveStatus   = document.getElementById('saveStatus');
+const statusMsg    = document.getElementById('statusMsg');
+
+const notesList = document.getElementById('notesList');
+const noteText  = document.getElementById('noteText');
+const noteAuthor= document.getElementById('noteAuthor');
+const addNoteBtn= document.getElementById('addNote');
+const noteMsg   = document.getElementById('noteMsg');
+
+const addStatus = document.getElementById('addStatus');
+
+function fillTpl(t, row) {
+  return t
+    .replaceAll('{{Name}}', row.Name || '')
+    .replaceAll('{{FirstName}}', (row.Name || '').split(' ')[0] || '')
+    .replaceAll('{{Address}}', row.Address || '');
+}
+
+function matches(row, q) {
+  if (!q) return true;
+  const hay = [row.Name, row.Email, row['Contact Number'], row.Address, row.Agency, row.Status].join(' ').toLowerCase();
+  return hay.includes(q.toLowerCase());
+}
+
+function optionize(select, options, includeBlank) {
+  const prev = select.value;
+  select.innerHTML = includeBlank ? '<option value=""></option>' : '';
+  options.forEach(v => {
+    const o = document.createElement('option'); o.value = v; o.textContent = v;
+    select.appendChild(o);
+  });
+  if (options.includes(prev)) select.value = prev;
+}
+
+function buildFilters() {
+  // addresses
+  address.innerHTML = '<option value="">All Addresses</option>';
+  ADDRESSES.forEach(v => {
+    const o = document.createElement('option'); o.value = v; o.textContent = v;
+    address.appendChild(o);
+  });
+
+  // statuses (filter)
+  statusEl.innerHTML = '<option value="">All Statuses</option>';
+  const full = Array.from(new Set([...STATUS_OPTIONS, ...STATUSES]));
+  full.forEach(v => {
+    const o = document.createElement('option'); o.value = v; o.textContent = v;
+    statusEl.appendChild(o);
+  });
+
+  // add-form status and detail status
+  optionize(addStatus, STATUS_OPTIONS, true);
+  optionize(detailStatus, STATUS_OPTIONS, true);
+}
+
+function render() {
+  const q  = search.value.trim();
+  const addr = address.value;
+  const st = statusEl.value;
+  const mustPhone = hasPhone.checked;
+
+  tbody.innerHTML = '';
+  let shown = 0;
+
+  for (const row of DATA) {
+    if (q && !matches(row, q)) continue;
+    if (addr && row.Address !== addr) continue;
+    if (st && row.Status !== st) continue;
+
+    const valid = row.E164 && row.E164.startsWith('+');
+    if (mustPhone && !valid) continue;
+
+    const msg = fillTpl(tpl.value, row);
+    const wa  = valid ? ('https://wa.me/' + row.E164.slice(1) + '?text=' + encodeURIComponent(msg)) : '';
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><a href="#" data-id="${row.ID}" class="lead-link">${row.Name || ''}</a></td>
+      <td class="hide-mobile">${row.Email || ''}</td>
+      <td>${row['Contact Number'] || ''} &nbsp; ${valid ? '<span class="badge-ok">●</span>' : '<span class="badge-miss">●</span>'}</td>
+      <td>${row.Address || ''}</td>
+      <td class="hide-mobile">${row.Agency || ''}</td>
+      <td><span class="tag">${row.Status || ''}</span></td>
+      <td>
+        ${wa ? `<a class="btn" href="${wa}" target="_blank" rel="noopener">Open WhatsApp</a>` : '<button class="btn" disabled>No number</button>'}
+        <button class="btn secondary" ${wa ? '' : 'disabled'} data-link="${wa}">Copy</button>
+      </td>
+      <td class="hide-mobile">${wa ? `<span class="muted">${wa}</span>` : ''}</td>
+    `;
+    tbody.appendChild(tr);
+    shown++;
+  }
+  count.textContent = `${shown} shown • ${DATA.length} total`;
+}
+
+tbody.addEventListener('click', (e) => {
+  const copyBtn = e.target.closest('button[data-link]');
+  if (copyBtn) {
+    const link = copyBtn.getAttribute('data-link');
+    if (!link) return;
+    navigator.clipboard.writeText(link).then(()=>{
+      const old = copyBtn.textContent;
+      copyBtn.textContent = 'Copied';
+      setTimeout(()=>copyBtn.textContent = old, 900);
+    });
+    return;
+  }
+  const a = e.target.closest('.lead-link');
+  if (a) {
+    e.preventDefault();
+    const id = a.getAttribute('data-id');
+    const lead = DATA.find(r => r.ID === id);
+    if (lead) selectLead(lead);
+  }
+});
+
+function selectLead(lead) {
+  SELECTED = lead;
+  leadName.textContent = lead.Name || '(no name)';
+  leadId.textContent = lead.ID || '';
+  detailStatus.value = STATUS_OPTIONS.includes(lead.Status) ? lead.Status : '';
+  loadNotes(lead.ID);
+}
+
+async function bootstrap() {
+  const res = await fetch(API + '?action=bootstrap');
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.error || 'Bootstrap failed');
+  DATA = json.rows || [];
+  ADDRESSES = json.addresses || [];
+  STATUSES = json.statuses || [];
+  STATUS_OPTIONS = json.statusOptions || [];
+  buildFilters();
+  render();
+}
+
+document.getElementById('exportCsv').addEventListener('click', () => {
+  const q  = search.value.trim();
+  const addr = address.value;
+  const st = statusEl.value;
+  const mustPhone = hasPhone.checked;
+  const rows = [['Name','Surname','Email','Contact Number','E164','Address','Agency','Status','WhatsAppLink','ID']];
+  for (const row of DATA) {
+    const valid = row.E164 && row.E164.startsWith('+');
+    if (q && !matches(row, q)) continue;
+    if (addr && row.Address !== addr) continue;
+    if (st && row.Status !== st) continue;
+    if (mustPhone && !valid) continue;
+    const msg = fillTpl(tpl.value, row);
+    const wa  = valid ? ('https://wa.me/' + row.E164.slice(1) + '?text=' + encodeURIComponent(msg)) : '';
+    rows.push([row.Name||'', row.Surname||'', row.Email||'', row['Contact Number']||'', row.E164||'', row.Address||'', row.Agency||'', row.Status||'', wa, row.ID||'']);
+  }
+  const csv = rows.map(r => r.map(x => `"${String(x).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'leads_filtered.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+// Add Lead
+document.getElementById('addForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const rec = Object.fromEntries(fd.entries());
+  const body = new URLSearchParams();
+  body.set('action', 'append');
+  body.set('payload', JSON.stringify(rec));
+
+  const res = await fetch(API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+    body
+  });
+  const json = await res.json().catch(()=>({ok:false, error:'Bad JSON'}));
+  const msg = document.getElementById('addMsg');
+  if (json.ok) {
+    msg.textContent = 'Lead added.';
+    DATA.push(json.row);
+    buildFilters();
+    render();
+    e.target.reset();
+  } else {
+    msg.textContent = 'Error: ' + (json.error || 'Unknown');
+  }
+  setTimeout(()=> msg.textContent='', 2500);
+});
+
+// Status save
+saveStatus.addEventListener('click', async () => {
+  if (!SELECTED) return;
+  const newStatus = detailStatus.value;
+  const body = new URLSearchParams();
+  body.set('action', 'update');
+  body.set('payload', JSON.stringify({ ID: SELECTED.ID, Status: newStatus }));
+  const res = await fetch(API, { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'}, body });
+  const json = await res.json().catch(()=>({ok:false}));
+  if (json.ok) {
+    statusMsg.textContent = 'Status saved';
+    const idx = DATA.findIndex(r => r.ID === SELECTED.ID);
+    if (idx >= 0) DATA[idx] = json.row;
+    SELECTED = json.row;
+    render();
+  } else {
+    statusMsg.textContent = 'Error saving status';
+  }
+  setTimeout(()=> statusMsg.textContent = '', 2000);
+});
+
+// Notes
+async function loadNotes(id) {
+  notesList.innerHTML = '<div class="muted">Loading notes…</div>';
+  const res = await fetch(API + '?action=notes&id=' + encodeURIComponent(id));
+  const json = await res.json().catch(()=>({ok:false}));
+  if (!json.ok) {
+    notesList.innerHTML = '<div class="muted">Failed to load notes.</div>';
+    return;
+  }
+  if (!json.notes.length) {
+    notesList.innerHTML = '<div class="muted">No notes yet.</div>';
+    return;
+  }
+  notesList.innerHTML = '';
+  json.notes.forEach(n => {
+    const div = document.createElement('div');
+    div.className = 'note';
+    div.innerHTML = `<small>${n.Timestamp} • ${n.Author || '—'}</small>${(n.Note || '').replace(/\n/g,'<br>')}`;
+    notesList.appendChild(div);
+  });
+}
+
+addNoteBtn.addEventListener('click', async () => {
+  if (!SELECTED) return;
+  const note = noteText.value.trim();
+  const author = noteAuthor.value.trim();
+  if (!note) return;
+  const body = new URLSearchParams();
+  body.set('action','addNote');
+  body.set('payload', JSON.stringify({ ID: SELECTED.ID, Note: note, Author: author }));
+  const res = await fetch(API, { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'}, body });
+  const json = await res.json().catch(()=>({ok:false}));
+  if (json.ok) {
+    noteMsg.textContent = 'Note added';
+    noteText.value = '';
+    loadNotes(SELECTED.ID);
+  } else {
+    noteMsg.textContent = 'Error adding note';
+  }
+  setTimeout(()=> noteMsg.textContent='', 2000);
+});
+
+// Filters/listeners
+search.addEventListener('input', render);
+address.addEventListener('change', render);
+statusEl.addEventListener('change', render);
+hasPhone.addEventListener('change', render);
+tpl.addEventListener('input', render);
+
+// Init
+bootstrap().catch(err => {
+  alert('Bootstrap failed: ' + err.message + '\n\n1) Check your Web App URL.\n2) Deploy set to "Anyone".\n3) Re-deploy a new version.');
+});
+</script>
+</body>
+</html>
