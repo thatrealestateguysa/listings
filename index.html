@@ -24,23 +24,19 @@
   th, td { padding:10px 8px; border-bottom:1px solid var(--line); text-align:left; font-size:14px; vertical-align:middle; }
   th { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); }
   .tag { font-size:12px; padding:4px 8px; border-radius:999px; border:1px solid var(--line); background:#1a1a1d; color:#d6d6d6; }
-  .muted { color:#bdbdbd; }
+  .muted { color:var(--muted); }
   .foot { display:flex; gap:8px; align-items:center; justify-content:space-between; margin-top:12px; flex-wrap:wrap; }
-  .count { font-size:13px; color:#bdbdbd; }
+  .count { font-size:13px; color:var(--muted); }
   .kbd { background:#1d1d20; border:1px solid var(--line); border-bottom-width:2px; padding:2px 6px; border-radius:6px; font-family: ui-monospace; font-size:12px; color:#d6d6d6; }
   .grid-2 { display:grid; grid-template-columns:1fr; gap:12px; }
   @media (min-width: 980px){ .grid-2 { grid-template-columns: 1fr 1fr; } }
   .hide-mobile { display:none; }
   @media (min-width: 980px){ .hide-mobile { display:table-cell; } }
-
   .badge-ok { color:#25D366; }
   .badge-miss { color:#ffba08; }
-
-  form.add { display:grid; grid-template-columns: repeat(6, 1fr); gap:8px; margin-top:10px; }
+  form.add { display:grid; grid-template-columns: repeat(5, 1fr); gap:8px; margin-top:10px; }
   form.add input, form.add select { width:100%; }
   @media (max-width: 900px){ form.add { grid-template-columns: 1fr; } }
-
-  /* Notes panel */
   .notes { position:sticky; top:16px; height: calc(100vh - 64px); overflow:auto; }
   .lead-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
   .notes-list { display:flex; flex-direction:column; gap:8px; margin-top:10px; max-height: 45vh; overflow:auto; }
@@ -55,7 +51,6 @@
 </header>
 
 <div class="wrap">
-  <!-- Main dashboard -->
   <div class="panel">
     <div class="row" style="margin-bottom:10px;">
       <input id="search" type="text" placeholder="Search name, email, phone, address…" style="flex:2; min-width:240px;">
@@ -79,7 +74,6 @@
           <input name="Contact Number" placeholder="Contact Number">
           <input name="Email" placeholder="Email">
           <input name="Address" placeholder="Address">
-          <input name="Agency" placeholder="Agency">
           <select name="Status" id="addStatus"></select>
           <button class="btn" style="grid-column: 1 / -1;">Add Lead</button>
         </form>
@@ -94,7 +88,6 @@
           <th class="hide-mobile">Email</th>
           <th>Phone</th>
           <th>Address</th>
-          <th class="hide-mobile">Agency</th>
           <th>Status</th>
           <th>WhatsApp</th>
           <th class="hide-mobile">WA Link</th>
@@ -109,7 +102,6 @@
     </div>
   </div>
 
-  <!-- Notes / details side panel -->
   <div class="panel notes">
     <div class="lead-head">
       <div>
@@ -142,8 +134,7 @@
 </div>
 
 <script>
-// Use Netlify proxy to avoid CORS
-const API = '/api';
+const API = 'https://script.google.com/macros/s/AKfycbzjklGxeQbxE0IIj-hJqnxF69SrtWy-dhhvdf9k7LH1g13Svxio53_n7mgPMcN-HSQ/exec';
 
 let DATA = [];
 let ADDRESSES = [];
@@ -182,7 +173,7 @@ function fillTpl(t, row) {
 
 function matches(row, q) {
   if (!q) return true;
-  const hay = [row.Name, row.Email, row['Contact Number'], row.Address, row.Agency, row.Status].join(' ').toLowerCase();
+  const hay = [row.Name, row.Email, row['Contact Number'], row.Address, row.Status].join(' ').toLowerCase();
   return hay.includes(q.toLowerCase());
 }
 
@@ -240,7 +231,6 @@ function render() {
       <td class="hide-mobile">${row.Email || ''}</td>
       <td>${row['Contact Number'] || ''} &nbsp; ${valid ? '<span class="badge-ok">●</span>' : '<span class="badge-miss">●</span>'}</td>
       <td>${row.Address || ''}</td>
-      <td class="hide-mobile">${row.Agency || ''}</td>
       <td><span class="tag">${row.Status || ''}</span></td>
       <td>
         ${wa ? `<a class="btn" href="${wa}" target="_blank" rel="noopener">Open WhatsApp</a>` : '<button class="btn" disabled>No number</button>'}
@@ -284,9 +274,21 @@ function selectLead(lead) {
 }
 
 async function bootstrap() {
-  const res = await fetch(API + '?action=bootstrap');
-  const json = await res.json();
-  if (!json.ok) throw new Error(json.error || 'Bootstrap failed');
+  let res;
+  try {
+    res = await fetch(API + '?action=bootstrap');
+  } catch (err) {
+    alert('Bootstrap failed: Network error. ' + err.message);
+    return;
+  }
+  const text = await res.text();
+  let json;
+  try { json = JSON.parse(text); }
+  catch (e) {
+    alert('Bootstrap failed: ' + e.message + '\n\nFirst 120 chars:\n' + text.slice(0,120) + '\n\nIf this persists, ensure your Web App URL returns JSON.');
+    return;
+  }
+  if (!json.ok) { alert('Bootstrap error: ' + (json.error || 'Unknown')); return; }
   DATA = json.rows || [];
   ADDRESSES = json.addresses || [];
   STATUSES = json.statuses || [];
@@ -300,7 +302,7 @@ document.getElementById('exportCsv').addEventListener('click', () => {
   const addr = address.value;
   const st = statusEl.value;
   const mustPhone = hasPhone.checked;
-  const rows = [['Name','Surname','Email','Contact Number','E164','Address','Agency','Status','WhatsAppLink','ID']];
+  const rows = [['Name','Surname','Email','Contact Number','E164','Address','Status','WhatsAppLink','ID']];
   for (const row of DATA) {
     const valid = row.E164 && row.E164.startsWith('+');
     if (q && !matches(row, q)) continue;
@@ -309,7 +311,7 @@ document.getElementById('exportCsv').addEventListener('click', () => {
     if (mustPhone && !valid) continue;
     const msg = fillTpl(tpl.value, row);
     const wa  = valid ? ('https://wa.me/' + row.E164.slice(1) + '?text=' + encodeURIComponent(msg)) : '';
-    rows.push([row.Name||'', row.Surname||'', row.Email||'', row['Contact Number']||'', row.E164||'', row.Address||'', row.Agency||'', row.Status||'', wa, row.ID||'']);
+    rows.push([row.Name||'', row.Surname||'', row.Email||'', row['Contact Number']||'', row.E164||'', row.Address||'', row.Status||'', wa, row.ID||'']);
   }
   const csv = rows.map(r => r.map(x => `"${String(x).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob = new Blob([csv], {type:'text/csv'});
@@ -334,7 +336,8 @@ document.getElementById('addForm').addEventListener('submit', async (e) => {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
     body
   });
-  const json = await res.json().catch(()=>({ok:false, error:'Bad JSON'}));
+  const txt = await res.text(); let json;
+  try { json = JSON.parse(txt); } catch (e) { alert('Add failed: ' + e.message + '\n' + txt.slice(0,120)); return; }
   const msg = document.getElementById('addMsg');
   if (json.ok) {
     msg.textContent = 'Lead added.';
@@ -356,7 +359,8 @@ saveStatus.addEventListener('click', async () => {
   body.set('action', 'update');
   body.set('payload', JSON.stringify({ ID: SELECTED.ID, Status: newStatus }));
   const res = await fetch(API, { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'}, body });
-  const json = await res.json().catch(()=>({ok:false}));
+  const txt = await res.text(); let json;
+  try { json = JSON.parse(txt); } catch (e) { alert('Save failed: ' + e.message + '\n' + txt.slice(0,120)); return; }
   if (json.ok) {
     statusMsg.textContent = 'Status saved';
     const idx = DATA.findIndex(r => r.ID === SELECTED.ID);
@@ -373,15 +377,10 @@ saveStatus.addEventListener('click', async () => {
 async function loadNotes(id) {
   notesList.innerHTML = '<div class="muted">Loading notes…</div>';
   const res = await fetch(API + '?action=notes&id=' + encodeURIComponent(id));
-  const json = await res.json().catch(()=>({ok:false}));
-  if (!json.ok) {
-    notesList.innerHTML = '<div class="muted">Failed to load notes.</div>';
-    return;
-  }
-  if (!json.notes.length) {
-    notesList.innerHTML = '<div class="muted">No notes yet.</div>';
-    return;
-  }
+  const txt = await res.text(); let json;
+  try { json = JSON.parse(txt); } catch (e) { notesList.innerHTML = '<div class="muted">Notes JSON parse failed.'; return; }
+  if (!json.ok) { notesList.innerHTML = '<div class="muted">Failed to load notes.</div>'; return; }
+  if (!json.notes.length) { notesList.innerHTML = '<div class="muted">No notes yet.</div>'; return; }
   notesList.innerHTML = '';
   json.notes.forEach(n => {
     const div = document.createElement('div');
@@ -400,7 +399,8 @@ addNoteBtn.addEventListener('click', async () => {
   body.set('action','addNote');
   body.set('payload', JSON.stringify({ ID: SELECTED.ID, Note: note, Author: author }));
   const res = await fetch(API, { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'}, body });
-  const json = await res.json().catch(()=>({ok:false}));
+  const txt = await res.text(); let json;
+  try { json = JSON.parse(txt); } catch (e) { noteMsg.textContent = 'Error adding note'; setTimeout(()=> noteMsg.textContent='', 2000); return; }
   if (json.ok) {
     noteMsg.textContent = 'Note added';
     noteText.value = '';
@@ -411,7 +411,6 @@ addNoteBtn.addEventListener('click', async () => {
   setTimeout(()=> noteMsg.textContent='', 2000);
 });
 
-// Filters/listeners
 search.addEventListener('input', render);
 address.addEventListener('change', render);
 statusEl.addEventListener('change', render);
@@ -419,9 +418,7 @@ hasPhone.addEventListener('change', render);
 tpl.addEventListener('input', render);
 
 // Init
-bootstrap().catch(err => {
-  alert('Bootstrap failed: ' + err.message + '\n\nIf this persists, your proxy or web app URL may be misconfigured.');
-});
+bootstrap();
 </script>
 </body>
 </html>
